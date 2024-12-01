@@ -23,22 +23,18 @@ public class RegisterActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_register);
 
-        // TextInputLayout 초기화
         usernameLayout = findViewById(R.id.usernameLayout);
         emailLayout = findViewById(R.id.emailLayout);
         passwordLayout = findViewById(R.id.passwordLayout);
 
-        // Firebase 초기화
         auth = FirebaseAuth.getInstance();
         firestore = FirebaseFirestore.getInstance();
 
-        // 회원가입 버튼
         MaterialButton registerButton = findViewById(R.id.buttonRegister);
         registerButton.setOnClickListener(view -> registerUser());
     }
 
     private void registerUser() {
-        // TextInputLayout 안의 EditText에서 텍스트 가져오기
         EditText usernameEditText = usernameLayout.findViewById(R.id.editTextUsername);
         EditText emailEditText = emailLayout.findViewById(R.id.editTextEmail);
         EditText passwordEditText = passwordLayout.findViewById(R.id.editTextPassword);
@@ -47,7 +43,6 @@ public class RegisterActivity extends AppCompatActivity {
         String email = emailEditText.getText().toString().trim();
         String password = passwordEditText.getText().toString().trim();
 
-        // 입력값 유효성 검사
         if (username.isEmpty()) {
             usernameLayout.setError("사용자 이름을 입력해주세요");
             return;
@@ -65,46 +60,30 @@ public class RegisterActivity extends AppCompatActivity {
             return;
         }
 
-        // Firebase 회원가입
         auth.createUserWithEmailAndPassword(email, password)
                 .addOnCompleteListener(this, task -> {
                     if (task.isSuccessful()) {
-                        // Firestore에 사용자 세부 정보 저장
                         saveUserData(username, email);
-
-                        // 회원가입 성공 메시지 표시
-                        Toast.makeText(RegisterActivity.this, "회원가입 성공", Toast.LENGTH_SHORT).show();
-
-                        // 메인 액티비티로 이동
+                        Toast.makeText(this, "회원가입 성공", Toast.LENGTH_SHORT).show();
                         navigateToMainActivity();
                     } else {
-                        // 회원가입 실패 시 사용자에게 메시지 표시
-                        String errorMessage = task.getException() != null ?
-                                task.getException().getMessage() : "알 수 없는 오류가 발생했습니다";
-                        Toast.makeText(RegisterActivity.this,
-                                "회원가입 실패: " + errorMessage,
-                                Toast.LENGTH_SHORT).show();
+                        String errorMessage = task.getException() != null ? task.getException().getMessage() : "오류 발생";
+                        Toast.makeText(this, "회원가입 실패: " + errorMessage, Toast.LENGTH_SHORT).show();
                     }
                 });
     }
 
     private void saveUserData(String username, String email) {
+        String userId = auth.getCurrentUser().getUid();
+
         Map<String, Object> user = new HashMap<>();
         user.put("username", username);
         user.put("email", email);
         user.put("created_at", System.currentTimeMillis());
 
-        firestore.collection("users")
-                .add(user)
-                .addOnSuccessListener(documentReference -> {
-                    Log.d("RegisterActivity", "DocumentSnapshot added with ID: " + documentReference.getId());
-                })
-                .addOnFailureListener(e -> {
-                    Log.e("RegisterActivity", "문서 추가 오류", e);
-                    Toast.makeText(RegisterActivity.this,
-                            "사용자 정보 저장 실패",
-                            Toast.LENGTH_SHORT).show();
-                });
+        firestore.collection("users").document(userId).set(user)
+                .addOnSuccessListener(aVoid -> Log.d("RegisterActivity", "사용자 정보 저장 성공"))
+                .addOnFailureListener(e -> Log.e("RegisterActivity", "사용자 정보 저장 실패", e));
     }
 
     private void navigateToMainActivity() {
