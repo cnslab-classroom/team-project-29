@@ -40,7 +40,7 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MessageV
 
         public MessageViewHolder(View itemView) {
             super(itemView);
-            messageTextView = itemView.findViewById(R.id.textViewMessage);
+            messageTextView = itemView.findViewById(R.id.textMessage);
         }
     }
 }

@@ -1,10 +1,12 @@
 package com.example.chatapp;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.annotation.SuppressLint;
+import android.graphics.Rect;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -19,6 +21,8 @@ import com.google.firebase.firestore.EventListener;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.FirebaseFirestoreException;
 import com.google.firebase.firestore.QuerySnapshot;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +43,7 @@ public class ChatActivity extends AppCompatActivity {
 
     private static final String TAG = "ChatActivity";
 
+    @SuppressLint("MissingInflatedId")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -55,41 +60,14 @@ public class ChatActivity extends AppCompatActivity {
         recyclerViewMessages.setLayoutManager(new LinearLayoutManager(this));
         recyclerViewMessages.setAdapter(messageAdapter);
 
+        // Firestore 초기화
         firestore = FirebaseFirestore.getInstance();
-        chatRoomId = getIntent().getStringExtra("chatRoomId");
+        chatRoomId = "default_chat_room"; // 고정된 채팅방 ID 사용
 
-        // 채팅방 ID가 null이거나 비어있는 경우 처리
-        if (chatRoomId == null || chatRoomId.isEmpty()) {
-            Toast.makeText(this, "Invalid chat room", Toast.LENGTH_SHORT).show();
-            finish();  // 유효하지 않은 채팅방이면 액티비티 종료
-            return;
-        }
+        // 채팅방 메시지 로드
+        loadMessages();
 
-        Log.d(TAG, "Checking if chat room exists: " + chatRoomId);
-
-        // Firestore에서 채팅방이 존재하는지 확인
-        firestore.collection("chatRooms").document(chatRoomId).get().addOnCompleteListener(task -> {
-            if (task.isSuccessful()) {
-                DocumentSnapshot document = task.getResult();
-                if (document != null && document.exists()) {
-                    Log.d(TAG, "Chat room exists: " + chatRoomId);
-                    // 채팅방이 존재하면 메시지 로드
-                    loadMessages();
-                } else {
-                    Log.d(TAG, "Chat room does not exist: " + chatRoomId);
-                    // 채팅방이 존재하지 않으면 에러 메시지 표시 후 종료
-                    Toast.makeText(ChatActivity.this, "Invalid chat room", Toast.LENGTH_SHORT).show();
-                    finish();
-                }
-            } else {
-                Log.e(TAG, "Error checking chat room", task.getException());
-                // Firestore 요청 실패 처리
-                Toast.makeText(ChatActivity.this, "Error checking chat room", Toast.LENGTH_SHORT).show();
-                finish();
-            }
-        });
-
-        // 메시지 전송 버튼 클릭 이벤트 처리
+        // 메시지 전송 버튼 이벤트
         buttonSend.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -97,6 +75,34 @@ public class ChatActivity extends AppCompatActivity {
             }
         });
     }
+    private void initializeChatRoom() {
+        firestore.collection("chatRooms").document(chatRoomId).get().addOnCompleteListener(task -> {
+            if (task.isSuccessful()) {
+                DocumentSnapshot document = task.getResult();
+                if (document == null || !document.exists()) {
+                    // 채팅방이 없으면 새로 생성
+                    firestore.collection("chatRooms")
+                            .document(chatRoomId)
+                            .set(new ChatRoom("Default Chat Room"))
+                            .addOnSuccessListener(aVoid -> Log.d(TAG, "Default chat room created"))
+                            .addOnFailureListener(e -> Log.e(TAG, "Failed to create chat room", e));
+                }
+            }
+        });
+    }
+    public class SpaceItemDecoration extends RecyclerView.ItemDecoration {
+        private final int verticalSpaceHeight;
+
+        public SpaceItemDecoration(int verticalSpaceHeight) {
+            this.verticalSpaceHeight = verticalSpaceHeight;
+        }
+
+        @Override
+        public void getItemOffsets(Rect outRect, View view, RecyclerView parent, RecyclerView.State state) {
+            outRect.bottom = verticalSpaceHeight;  // 각 아이템의 아래쪽에 공간 추가
+        }
+    }
+
 
     // Firestore에서 메시지 로드
     private void loadMessages() {
@@ -112,16 +118,15 @@ public class ChatActivity extends AppCompatActivity {
                             return;
                         }
 
-                        // Firestore로부터 받은 메시지 업데이트
                         if (value != null) {
-                            messageList.clear();  // 메시지 목록 초기화 (중복 방지)
                             for (DocumentChange dc : value.getDocumentChanges()) {
                                 if (dc.getType() == DocumentChange.Type.ADDED) {
                                     Message message = dc.getDocument().toObject(Message.class);
-                                    messageList.add(message);  // 새 메시지 추가
+                                    messageList.add(message); // 새로운 메시지만 추가
+                                    messageAdapter.notifyItemInserted(messageList.size() - 1);
+                                    recyclerViewMessages.scrollToPosition(messageList.size() - 1); // 최신 메시지로 스크롤
                                 }
                             }
-                            messageAdapter.notifyDataSetChanged();  // 어댑터에 데이터 변경 알리기
                         }
                     }
                 });
@@ -153,4 +158,43 @@ public class ChatActivity extends AppCompatActivity {
                     }
                 });
     }
+
+    private void sendMessageWithImage(Uri imageUri, String messageText) {
+        if (imageUri == null && messageText.trim().isEmpty()) {
+            return; // 텍스트와 이미지 둘 다 비어있으면 메시지를 보내지 않음
+        }
+
+        // Firebase Storage에 이미지 업로드
+        StorageReference storageReference = FirebaseStorage.getInstance().getReference().child("chat_images/" + System.currentTimeMillis() + ".jpg");
+        storageReference.putFile(imageUri)
+                .addOnSuccessListener(taskSnapshot -> storageReference.getDownloadUrl().addOnSuccessListener(uri -> {
+                    // Firestore에 메시지 저장
+                    String messageTextToStore = messageText.isEmpty() ? null : messageText;
+                    sendMessageToFirestore(messageTextToStore, uri.toString());
+                }))
+                .addOnFailureListener(e -> Toast.makeText(ChatActivity.this, "Image upload failed", Toast.LENGTH_SHORT).show());
+    }
+
+    // Firestore에 메시지 저장
+    private void sendMessageToFirestore(String messageText, String imageUrl) {
+        String senderId = FirebaseAuth.getInstance().getCurrentUser().getUid();
+        long timestamp = System.currentTimeMillis();
+
+        // Firestore에 저장할 메시지 객체 생성
+        Message message = new Message(senderId, messageText, timestamp);
+
+        // Firestore에 메시지 저장
+        FirebaseFirestore.getInstance().collection("chatRooms")
+                .document(chatRoomId)
+                .collection("messages")
+                .add(message)
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        Toast.makeText(ChatActivity.this, "Message sent", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(ChatActivity.this, "Failed to send message", Toast.LENGTH_SHORT).show();
+                    }
+                });
+    }
+
 }

@@ -4,6 +4,7 @@ public class Message {
     private String senderId;
     private String message;
     private long timestamp;
+    private String imageUrl; // 이미지 URL 필드 추가
 
     // Firebase를 위한 기본 생성자
     public Message() {}
@@ -13,6 +14,7 @@ public class Message {
         this.senderId = senderId;
         this.message = message;
         this.timestamp = timestamp;
+        this.imageUrl = imageUrl; // 이미지 URL 초기화
     }
 
     public String getSenderId() {
@@ -37,5 +39,13 @@ public class Message {
 
     public void setTimestamp(long timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 }

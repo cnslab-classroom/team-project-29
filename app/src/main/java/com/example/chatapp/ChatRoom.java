@@ -6,7 +6,7 @@ public class ChatRoom {
     private String roomId;
     private List<String> participantIds;
 
-    public ChatRoom() {
+    public ChatRoom(String defaultChatRoom) {
         // Firebase를 위한 기본 생성자
     }
 
