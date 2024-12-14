@@ -139,6 +139,8 @@ public class ChatActivity extends AppCompatActivity {
             return;
         }
 
+        long currentTime = System.currentTimeMillis();
+
         // Firebase에서 현재 사용자 ID 가져오기
         String senderId = FirebaseAuth.getInstance().getCurrentUser().getUid();
         Message message = new Message(senderId, messageText, System.currentTimeMillis());
