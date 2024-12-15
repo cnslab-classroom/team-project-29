@@ -9,8 +9,16 @@ public class Message {
     // Firebase를 위한 기본 생성자
     public Message() {}
 
-    // 메시지를 위한 생성자
+    // 메시지를 위한 생성자 (텍스트만 있는 경우)
     public Message(String senderId, String message, long timestamp) {
+        this.senderId = senderId;
+        this.message = message;
+        this.timestamp = timestamp;
+        this.imageUrl = null; // 이미지 URL을 null로 초기화
+    }
+
+    // 메시지 + 이미지용 생성자
+    public Message(String senderId, String message, String imageUrl, long timestamp) {
         this.senderId = senderId;
         this.message = message;
         this.timestamp = timestamp;

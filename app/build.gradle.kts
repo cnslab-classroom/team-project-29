@@ -54,4 +54,7 @@ dependencies {
     implementation("com.google.firebase:firebase-auth:23.1.0")
     implementation ("com.google.firebase:firebase-firestore")
     implementation ("androidx.recyclerview:recyclerview:1.3.2")
+
+    implementation ("com.github.bumptech.glide:glide:4.16.0") // 최신 버전 확인 필요
+    annotationProcessor ("com.github.bumptech.glide:compiler:4.16.0")
 }

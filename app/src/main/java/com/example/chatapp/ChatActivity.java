@@ -5,6 +5,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import android.annotation.SuppressLint;
+import android.content.Intent;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Bundle;
@@ -53,6 +54,7 @@ public class ChatActivity extends AppCompatActivity {
         recyclerViewMessages = findViewById(R.id.recyclerViewMessages);
         editTextMessage = findViewById(R.id.editTextMessage);
         buttonSend = findViewById(R.id.buttonSend);
+        Button buttonAttachImage = findViewById(R.id.buttonAttachImage); // Attach 버튼 가져오기
 
         // 메시지 목록 초기화
         messageList = new ArrayList<>();
@@ -72,6 +74,14 @@ public class ChatActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 sendMessage();
+            }
+        });
+
+
+        buttonAttachImage.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openImagePicker();
             }
         });
     }
@@ -161,42 +171,65 @@ public class ChatActivity extends AppCompatActivity {
                 });
     }
 
+    // Firestore에 메시지 저장
     private void sendMessageWithImage(Uri imageUri, String messageText) {
         if (imageUri == null && messageText.trim().isEmpty()) {
             return; // 텍스트와 이미지 둘 다 비어있으면 메시지를 보내지 않음
         }
 
         // Firebase Storage에 이미지 업로드
-        StorageReference storageReference = FirebaseStorage.getInstance().getReference().child("chat_images/" + System.currentTimeMillis() + ".jpg");
+        StorageReference storageReference = FirebaseStorage.getInstance()
+                .getReference().child("chat_images/" + System.currentTimeMillis() + ".jpg");
+
         storageReference.putFile(imageUri)
-                .addOnSuccessListener(taskSnapshot -> storageReference.getDownloadUrl().addOnSuccessListener(uri -> {
-                    // Firestore에 메시지 저장
-                    String messageTextToStore = messageText.isEmpty() ? null : messageText;
-                    sendMessageToFirestore(messageTextToStore, uri.toString());
-                }))
-                .addOnFailureListener(e -> Toast.makeText(ChatActivity.this, "Image upload failed", Toast.LENGTH_SHORT).show());
+                .addOnSuccessListener(taskSnapshot -> {
+                    storageReference.getDownloadUrl().addOnSuccessListener(uri -> {
+                        // Firestore에 이미지 URL과 텍스트 저장
+                        sendMessageToFirestore(messageText, uri.toString());
+                    });
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(ChatActivity.this, "Image upload failed", Toast.LENGTH_SHORT).show();
+                });
     }
 
-    // Firestore에 메시지 저장
     private void sendMessageToFirestore(String messageText, String imageUrl) {
         String senderId = FirebaseAuth.getInstance().getCurrentUser().getUid();
         long timestamp = System.currentTimeMillis();
 
         // Firestore에 저장할 메시지 객체 생성
-        Message message = new Message(senderId, messageText, timestamp);
+        Message message = new Message(senderId, messageText, imageUrl, timestamp);
 
-        // Firestore에 메시지 저장
-        FirebaseFirestore.getInstance().collection("chatRooms")
+        firestore.collection("chatRooms")
                 .document(chatRoomId)
                 .collection("messages")
                 .add(message)
                 .addOnCompleteListener(task -> {
                     if (task.isSuccessful()) {
                         Toast.makeText(ChatActivity.this, "Message sent", Toast.LENGTH_SHORT).show();
+                        editTextMessage.setText(""); // 입력란 초기화
                     } else {
                         Toast.makeText(ChatActivity.this, "Failed to send message", Toast.LENGTH_SHORT).show();
                     }
                 });
+    }
+    private static final int PICK_IMAGE_REQUEST = 1;
+
+    private void openImagePicker() {
+        Intent intent = new Intent();
+        intent.setType("image/*");
+        intent.setAction(Intent.ACTION_GET_CONTENT);
+        startActivityForResult(Intent.createChooser(intent, "Select Image"), PICK_IMAGE_REQUEST);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            Uri imageUri = data.getData();
+            sendMessageWithImage(imageUri, editTextMessage.getText().toString().trim());
+        }
     }
 
 }
